@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>DM Screen</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #111; color: #eee; margin: 0; display: flex; height: 100vh; overflow:hidden; }
+        .col-left { width: 350px; border-right: 1px solid #333; display: flex; flex-direction: column; background: #1a1a1a; }
+        .col-mid { flex: 1; display: flex; flex-direction: column; padding: 0; background: #222; position:relative; }
+        .col-right { width: 300px; border-left: 1px solid #333; background: #1a1a1a; display: flex; flex-direction: column; }
+        h2 { margin: 0; padding: 15px; border-bottom: 2px solid #e51e25; font-size: 1.2em; background: #222; }
+        
+        /* INVITE BOX */
+        .invite-box { padding: 15px; background: #1a1a1a; border-bottom: 1px solid #444; display: flex; flex-direction: column; gap: 8px; }
+        .invite-code-display { text-align: center; background: #222; border: 1px dashed #444; padding: 10px; border-radius: 6px; }
+        .code-label { display: block; font-size: 0.7em; color: #888; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 2px; }
+        .code-val { font-size: 1.8em; font-weight: bold; color: #e51e25; font-family: monospace; letter-spacing: 2px; }
+        .link-row { display: flex; gap: 5px; }
+        .link-row input { flex: 1; background: #111; border: 1px solid #444; color: #8af; padding: 5px; text-align: center; border-radius: 4px; font-size: 0.8em; }
+        .copy-btn { cursor: pointer; background: #333; border: 1px solid #555; color: white; padding: 5px 10px; border-radius: 4px; font-weight: bold; transition: 0.2s; }
+        .copy-btn:hover { background: #444; border-color: #8af; }
+
+        /* DICE BAR (BOTTOM) */
+        .dice-bar { position: absolute; bottom: 0; left: 0; width: 100%; background: #2a2a2a; border-top: 2px solid #e51e25; padding: 10px; display: flex; gap: 10px; align-items: center; justify-content: center; box-shadow: 0 -4px 10px rgba(0,0,0,0.5); z-index: 10; }
+        .dice-bar input, .dice-bar select { padding: 8px; background: #111; border: 1px solid #444; color: white; border-radius: 4px; font-size: 1em; font-weight: bold; text-align: center; }
+        .dice-bar button { padding: 8px 20px; background: #e51e25; color: white; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .dice-bar button:hover { background: #ff3b3b; }
+
+        /* TRACKER */
+        .tracker-list { flex: 1; overflow-y: auto; padding: 10px; }
+        .track-row { display: flex; align-items: center; background: #333; margin-bottom: 5px; padding: 8px; border-radius: 4px; border-left: 4px solid transparent; }
+        .track-row.player { border-left-color: #8af; }
+        .track-row.monster { border-left-color: #e51e25; }
+        .track-init { width: 40px; font-weight: bold; font-size: 1.2em; text-align: center; background: #222; border: 1px solid #444; color: #fff; margin-right: 10px; padding: 5px; }
+        .track-name { flex: 1; font-weight: bold; cursor: pointer; }
+        .track-hp { width: 60px; text-align: right; margin-right: 10px; }
+        .track-hp input { width: 100%; background: #222; border: 1px solid #444; color: #4f4; padding: 3px; text-align: center; }
+        .btn-del { color: #f44; cursor: pointer; font-weight: bold; padding: 0 5px; }
+        .btn-reroll { color: #888; cursor: pointer; font-size:0.8em; margin-right:5px; } .btn-reroll:hover { color:#fff; }
+        .tracker-controls { padding: 10px; background: #222; border-top: 1px solid #333; display: flex; gap: 5px; }
+        
+        /* SEARCH & TABS */
+        .search-bar { padding: 15px; background: #252525; border-bottom: 1px solid #444; display: flex; gap: 10px; }
+        .search-bar input { flex: 1; padding: 8px; background: #111; border: 1px solid #444; color: white; border-radius: 4px; }
+        .tabs-header { display: flex; overflow-x: auto; background: #1a1a1a; border-bottom: 1px solid #444; height: 40px; }
+        .tab-btn { padding: 0 15px; border: none; background: #222; color: #888; cursor: pointer; border-right: 1px solid #333; line-height: 40px; white-space: nowrap; }
+        .tab-btn.active { background: #333; color: #fff; border-top: 2px solid #e51e25; }
+        .tab-btn:hover { background: #2a2a2a; }
+        .tab-close { margin-left: 8px; color: #f44; font-weight: bold; }
+        
+        /* CUSTOM MONSTER FORM */
+        #customMonsterForm { background:#252525; padding:15px; border-bottom:1px solid #444; display:none; }
+        .form-row { display:flex; gap:10px; margin-bottom:10px; }
+        .form-row input { flex:1; background:#111; border:1px solid #444; color:#fff; padding:5px; }
+        
+        /* STAT BLOCK */
+        .tab-content-area { flex: 1; overflow-y: auto; padding: 20px; padding-bottom: 80px; /* Space for dice bar */ }
+        .stat-block { background: #e0d5b5; color: #222; padding: 15px; border-radius: 4px; box-shadow: 0 0 10px rgba(0,0,0,0.5); font-family: 'Georgia', serif; max-width: 600px; margin: 0 auto; }
+        .stat-block h1 { color: #58180d; border-bottom: 2px solid #58180d; font-size: 1.5em; margin: 0 0 5px 0; }
+        .stat-block .type { font-style: italic; margin-bottom: 10px; }
+        .red-line { height: 2px; background: #58180d; margin: 5px 0; }
+        .stat-grid { display: flex; justify-content: space-around; color: #58180d; font-weight: bold; margin: 10px 0; }
+        .stat-box { text-align: center; cursor: pointer; padding: 5px; border-radius: 4px; transition: 0.2s; }
+        .stat-box:hover { background: rgba(88, 24, 13, 0.1); }
+        .stat-box input { width:40px; text-align:center; background:rgba(255,255,255,0.3); border:1px solid #58180d; font-family:inherit; font-weight:bold; color:#58180d; }
+        .stat-roll-btn { cursor:pointer; text-decoration:underline; font-size:0.9em; } .stat-roll-btn:hover { color:#802010; }
+        .stat-val { font-size: 1.2em; }
+        .skill-tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 10px; }
+        .skill-tag { background: rgba(88, 24, 13, 0.1); padding: 2px 6px; border-radius: 4px; font-size: 0.9em; cursor: pointer; border: 1px solid #58180d; }
+        .skill-tag:hover { background: #58180d; color: #e0d5b5; }
+        .action-item { margin-bottom: 8px; padding: 5px; border-bottom: 1px dotted #58180d; }
+        .action-item strong { font-weight: bold; }
+        .atk-btn-row { margin-top: 4px; display: flex; gap: 5px; }
+        .atk-btn { background: #58180d; color: #e0d5b5; border: none; padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 0.8em; font-weight: bold; }
+        .atk-btn:hover { background: #802010; } .dmg-btn { background: #802010; }
+        .add-row { margin-top:10px; border-top:1px dashed #58180d; padding-top:5px; }
+        .add-row input, .add-row select { padding:4px; font-size:0.9em; background:#f0e5c5; border:1px solid #58180d; color:#222; }
+        .btn-add-mini { background:#58180d; color:#e0d5b5; border:none; cursor:pointer; font-weight:bold; padding:4px 8px; }
+
+        /* BUTTONS */
+        .btn { background: #444; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; flex: 1; }
+        .btn:hover { background: #555; }
+        .btn-blue { background: #2b5fa3; }
+        
+        #searchResults { position: absolute; top: 120px; left: 365px; width: 300px; background: #111; border: 1px solid #555; z-index: 100; max-height: 300px; overflow-y: auto; display: none; }
+        .result-item { padding: 8px; border-bottom: 1px solid #333; cursor: pointer; }
+        .result-item:hover { background: #2b5fa3; }
+        .mode-toggle { display:flex; gap:5px; margin-bottom:5px; justify-content:center; padding-top:5px; }
+        .mode-btn { background:#333; border:1px solid #444; color:#888; cursor:pointer; padding:2px 8px; font-size:0.8em; }
+        .mode-btn.active { background:#e51e25; color:white; border-color:#e51e25; }
+
+        #chat { flex: 1; overflow-y: auto; padding: 10px; font-family: monospace; }
+        .msg { margin-bottom: 5px; padding: 5px; background: #222; border-left: 3px solid #555; font-size: 0.9em; }
+        .msg strong { color: #8af; }
+        .res-hit { color: #8af; font-weight: bold; } .res-dmg { color: #e51e25; font-weight: bold; } 
+        .res-custom { color: #d4af37; font-weight: bold; }
+        .roll-log-header { display:flex; justify-content:space-between; align-items:center; padding-right:10px; }
+        .private-check { font-size:0.8em; color:#e51e25; font-weight:bold; }
+    </style>
+</head>
+<body>
+
+<div class="col-left">
+    <div class="invite-box">
+        <div class="invite-code-display"><span class="code-label">Join Code</span><div class="code-val">{{ room }}</div></div>
+        <div class="link-row"><input type="text" id="inviteLink" readonly><button class="copy-btn" onclick="copyLink()">Copy</button></div>
+    </div>
+    <h2>Initiative Tracker</h2>
+    <div class="tracker-list" id="trackerList"></div>
+    <div class="tracker-controls"><button class="btn btn-blue" onclick="send('dm_sort_init')">Sort</button><button class="btn" onclick="send('dm_clear')" style="color:#f44">Clear</button></div>
+</div>
+
+<div class="col-mid">
+    <div class="mode-toggle">
+        <button class="mode-btn active" id="modeMonster" onclick="setMode('monster')">Monsters</button>
+        <button class="mode-btn" id="modeSpell" onclick="setMode('spell')">Spell Lookup</button>
+    </div>
+    <div class="search-bar">
+        <input type="text" id="monsterSearch" placeholder="Search Monsters..." onkeyup="search()">
+        <button class="btn" style="flex:0; width:80px;" onclick="toggleCustomForm()">+ Custom</button>
+    </div>
+    <div id="searchResults"></div>
+    
+    <div id="customMonsterForm">
+        <div class="form-row"><input type="text" id="custName" placeholder="Name"><input type="number" id="custHP" placeholder="HP" style="width:60px"><input type="number" id="custAC" placeholder="AC" style="width:60px"><input type="number" id="custInit" placeholder="Init Mod" style="width:60px"></div>
+        <button class="btn btn-blue" onclick="addCustomMonster()">Add to Tracker</button>
+    </div>
+    
+    <div class="tabs-header" id="tabsHeader"></div>
+    <div class="tab-content-area" id="tabContent">
+        <div style="text-align:center; color:#555; margin-top:50px;">Search for a monster or spell.</div>
+    </div>
+
+    <div class="dice-bar">
+        <input type="number" id="customCount" value="1" min="1" style="width:50px;">
+        <select id="customDie">
+            <option value="d4">d4</option>
+            <option value="d6">d6</option>
+            <option value="d8">d8</option>
+            <option value="d10">d10</option>
+            <option value="d12">d12</option>
+            <option value="d20" selected>d20</option>
+            <option value="d100">d100</option>
+        </select>
+        <input type="number" id="customMod" value="0" placeholder="+/-" style="width:60px;">
+        <button onclick="rollCustom()">Roll</button>
+    </div>
+</div>
+
+<div class="col-right">
+    <h2 class="roll-log-header">Roll Log <label class="private-check"><input type="checkbox" id="privateRolls"> Secret</label></h2>
+    <div id="chat"></div>
+</div>
+
+<script>
+    var socket = io();
+    var ROOM_ID = "{{ room }}"; 
+    var activeMonsters = {};
+    var currentMode = 'monster';
+
+    document.getElementById('inviteLink').value = window.location.origin + "/join/" + ROOM_ID;
+    function copyLink() {
+        var copyText = document.getElementById("inviteLink");
+        copyText.select();
+        document.execCommand("copy");
+        alert("Invite link copied!");
+    }
+
+    socket.on('connect', function() { socket.emit('join_campaign', {room: ROOM_ID, is_dm: true}); });
+    function send(event, data={}) { data.room = ROOM_ID; socket.emit(event, data); }
+
+    // --- NEW CUSTOM ROLL ---
+    function rollCustom() {
+        var cnt = document.getElementById('customCount').value;
+        var sides = document.getElementById('customDie').value;
+        var mod = document.getElementById('customMod').value;
+        var diceStr = cnt + sides; 
+        
+        send('roll_action', {
+            user: 'DM',
+            type: 'attack_split',
+            sub_type: 'dice_effect',
+            lbl: 'Custom Roll',
+            dice: diceStr,
+            dmg_mod: parseInt(mod),
+            private: isPrivate()
+        });
+    }
+
+    // --- TRACKER & CHAT ---
+    socket.on('update_encounter', function(data) {
+        var div = document.getElementById('trackerList'); div.innerHTML = "";
+        data.forEach(c => {
+            var row = document.createElement('div'); row.className = "track-row " + c.type;
+            var hpInput = (c.type === 'monster') ? `<div class="track-hp"><input type="number" value="${c.hp}" onchange="send('dm_update_combatant', {id: '${c.id}', key: 'hp', val: this.value})"></div>` : `<div class="track-hp" style="color:#aaa">${c.hp||'?'}</div>`;
+            var rerollBtn = (c.type === 'monster') ? `<span class="btn-reroll" onclick="rerollInit('${c.id}', ${c.init_mod||0})">🎲</span>` : '';
+            var clickAction = (c.index) ? `onclick="openTab('${c.index}', '${c.name}')"` : "";
+            row.innerHTML = `${rerollBtn}<input type="number" class="track-init" value="${c.init}" onchange="send('dm_update_combatant', {id: '${c.id}', key: 'init', val: this.value})"><div class="track-name" ${clickAction}>${c.name}</div>${hpInput}<div class="btn-del" onclick="send('dm_remove_combatant', {id: '${c.id}'})">x</div>`;
+            div.appendChild(row);
+        });
+    });
+
+    function rerollInit(id, mod) { send('dm_update_combatant', {id: id, key: 'init', val: Math.floor(Math.random()*20)+1+mod}); }
+
+    socket.on('roll_result', function(d) {
+        var c = document.getElementById('chat');
+        var html = `<div class="msg"><strong>${d.user}</strong>: ${d.lbl}`;
+        if(d.sub_type === 'hit') html += ` Hit -> <span class="${d.nat20?'res-crit':'res-hit'}">${d.val}</span> <small>${d.formula}</small>`; 
+        else if(d.sub_type === 'dmg') html += ` Dmg -> <span class="res-dmg">${d.val}</span> <small>${d.formula}</small>`;
+        else if(d.sub_type === 'dice_effect') html += ` Result -> <span class="res-custom">${d.val}</span> <small>${d.formula}</small>`;
+        else html += ` -> <b>${d.val || d.tot}</b>`;
+        html += `</div>`; c.innerHTML += html; c.scrollTop = c.scrollHeight;
+    });
+
+    // --- MONSTER LOGIC ---
+    function addCustomMonster() {
+        var name = document.getElementById('custName').value;
+        if(!name) return;
+        var hp = parseInt(document.getElementById('custHP').value) || 10;
+        var mod = parseInt(document.getElementById('custInit').value) || 0;
+        var custId = "custom-" + Date.now();
+        send('dm_add_combatant', { name: name, init: Math.floor(Math.random()*20)+1+mod, hp: hp, max_hp: hp, type: 'monster', init_mod: mod, index: custId });
+        var custData = { index: custId, name: name, is_custom: true, hit_points: hp, armor_class: [{value: document.getElementById('custAC').value||10}], speed: {walk: "30 ft"}, strength: 10, dexterity: 10, constitution: 10, intelligence: 10, wisdom: 10, charisma: 10, proficiencies: [], actions: [] };
+        addTab(custId, name, custData, 'monster');
+        document.getElementById('custName').value = ""; toggleCustomForm();
+    }
+
+    function rollAttack(name, actionName, bonus) { send('roll_action', { user: name, type: 'attack_split', sub_type: 'hit', lbl: actionName, hit_mod: bonus, private: isPrivate() }); }
+    function rollDamage(name, actionName, diceStr) { var p = diceStr.split('+'); send('roll_action', { user: name, type: 'attack_split', sub_type: 'dmg', lbl: actionName, dice: p[0].trim(), dmg_mod: p.length>1?parseInt(p[1]):0, private: isPrivate() }); }
+    function rollStat(n, s, v){ send('roll_action', {user: n, type: 'skill', lbl: s+' Check', mod: Math.floor((v-10)/2), private: isPrivate()}); }
+    function rollSkill(n, s, m){ send('roll_action', {user: n, type: 'skill', lbl: s, mod: m, private: isPrivate()}); }
+    
+    function isPrivate() { return document.getElementById('privateRolls').checked; }
+    function setMode(m) { currentMode = m; document.getElementById('modeMonster').className = m==='monster'?'mode-btn active':'mode-btn'; document.getElementById('modeSpell').className = m==='spell'?'mode-btn active':'mode-btn'; document.getElementById('monsterSearch').placeholder = m==='monster'?'Search Monsters...':'Search Spells...'; }
+    function toggleCustomForm() { var f = document.getElementById('customMonsterForm'); f.style.display = (f.style.display === 'block') ? 'none' : 'block'; }
+    function updateCustomStat(id, stat, val) { var t=tabs.find(x=>x.id===id); if(t){t.data[stat]=parseInt(val); renderStatBlock(t.data);} }
+    function addCustomSkill(id) { var t=tabs.find(x=>x.id===id); var n=document.getElementById('newSkillName').value; var m=parseInt(document.getElementById('newSkillMod').value); if(t&&n){ t.data.proficiencies.push({proficiency:{name:"Skill: "+n},value:m}); renderStatBlock(t.data); } }
+    function addCustomAction(id) { var t=tabs.find(x=>x.id===id); var n=document.getElementById('newActName').value; var h=parseInt(document.getElementById('newActHit').value)||0; var d=document.getElementById('newActDice').value; if(t&&n){ t.data.actions.push({name:n, desc:"", attack_bonus:h, damage:d?[{damage_dice:d}]:[]}); renderStatBlock(t.data); } }
+
+    var tabs=[]; var currentTab=null; var searchTimeout;
+    function search() {
+        clearTimeout(searchTimeout); var q=document.getElementById('monsterSearch').value; var resDiv=document.getElementById('searchResults'); if(q.length<2){resDiv.style.display='none';return;}
+        searchTimeout=setTimeout(()=>{
+            var url=currentMode==='monster'?`https://www.dnd5eapi.co/api/monsters?name=${q}`:`https://www.dnd5eapi.co/api/spells?name=${q}`;
+            fetch(url).then(r=>r.json()).then(data=>{
+                resDiv.innerHTML=""; if(data.results.length>0){ resDiv.style.display='block'; data.results.forEach(m=>{ var item=document.createElement('div'); item.className='result-item'; item.innerText=m.name; item.onclick=()=>{ if(currentMode==='monster') addMonster(m.index,m.name); else openTab(m.index,m.name,'spell'); resDiv.style.display='none'; document.getElementById('monsterSearch').value=''; }; resDiv.appendChild(item); }); } else { resDiv.style.display='none'; }
+            });
+        },300);
+    }
+    
+    function addMonster(index, name) {
+        fetch(`https://www.dnd5eapi.co/api/monsters/${index}`).then(r => r.json()).then(data => {
+            var dexMod = Math.floor((data.dexterity - 10) / 2);
+            send('dm_add_combatant', { name: name, init: Math.floor(Math.random()*20)+1+dexMod, hp: data.hit_points, max_hp: data.hit_points, type: 'monster', index: index, init_mod: dexMod });
+            addTab(index, name, data, 'monster');
+        });
+    }
+    
+    function openTab(index, name, type='monster') {
+        var existing = tabs.find(t => t.id === index);
+        if(existing) setActiveTab(index);
+        else fetch(`https://www.dnd5eapi.co/api/${type}s/${index}`).then(r => r.json()).then(data => addTab(index, name, data, type));
+    }
+    function addTab(id, name, data, type) { if(!tabs.find(t => t.id === id)) { tabs.push({id: id, name: name, data: data, type: type}); renderTabsHeader(); } setActiveTab(id); }
+    function closeTab(id, e) { e.stopPropagation(); tabs = tabs.filter(t => t.id !== id); renderTabsHeader(); if(tabs.length > 0) setActiveTab(tabs[tabs.length-1].id); else document.getElementById('tabContent').innerHTML = ""; }
+    function setActiveTab(id) { currentTab = id; renderTabsHeader(); var t = tabs.find(t => t.id === id); if(t) { if(t.type==='monster') renderStatBlock(t.data); else renderSpellBlock(t.data); } }
+    function renderTabsHeader() { var h = document.getElementById('tabsHeader'); h.innerHTML = ""; tabs.forEach(t => { var btn = document.createElement('div'); btn.className = `tab-btn ${currentTab === t.id ? 'active' : ''}`; btn.innerHTML = `${t.name} <span class="tab-close" onclick="closeTab('${t.id}', event)">x</span>`; btn.onclick = () => setActiveTab(t.id); h.appendChild(btn); }); }
+    
+    function renderSpellBlock(s) { document.getElementById('tabContent').innerHTML = `<div class="stat-block"><h1>${s.name}</h1><div class="type">${s.level>0?"Lvl "+s.level:"Cantrip"} ${s.school.name}</div><div class="red-line"></div><div><strong>Time:</strong> ${s.casting_time} | <strong>Range:</strong> ${s.range}</div><div><strong>Duration:</strong> ${s.duration}</div><div class="red-line"></div><div>${s.desc.join('<br><br>')}</div></div>`; }
+
+    function renderStatBlock(m) {
+        var content = document.getElementById('tabContent');
+        var statsHtml = "";
+        ['strength','dexterity','constitution','intelligence','wisdom','charisma'].forEach(s => {
+            var short = s.substring(0,3).toUpperCase(); var val = m[s]; var mod = Math.floor((val-10)/2);
+            if(m.is_custom) statsHtml += `<div class="stat-box"><div class="stat-roll-btn" onclick="rollStat('${m.name}', '${short}', ${val})">${short} 🎲</div><input type="number" value="${val}" onchange="updateCustomStat('${m.index}', '${s}', this.value)"><div style="font-size:0.8em; color:#58180d;">${mod>=0?'+':''}${mod}</div></div>`;
+            else statsHtml += `<div class="stat-box" onclick="rollStat('${m.name}', '${short}', ${val})"><div class="stat-val">${short}</div><div class="stat-val">${val} (${mod>=0?'+':''}${mod})</div></div>`;
+        });
+        
+        var skillsHtml = "";
+        if(m.proficiencies) m.proficiencies.forEach(p => { if(p.proficiency.name.includes("Skill")) skillsHtml += `<div class="skill-tag" onclick="rollSkill('${m.name}', '${p.proficiency.name.replace("Skill: ", "")}', ${p.value})">${p.proficiency.name.replace("Skill: ", "")} +${p.value}</div>`; });
+        if(m.is_custom) skillsHtml += `<div class="add-row"><select id="newSkillName"><option>Acrobatics</option><option>Stealth</option><option>Perception</option></select><input type="number" id="newSkillMod" placeholder="+Mod" style="width:50px"><button class="btn-add-mini" onclick="addCustomSkill('${m.index}')">Add</button></div>`;
+
+        var actionsHtml = "";
+        if(m.actions) m.actions.forEach(a => {
+            var btns = "";
+            if(a.attack_bonus !== undefined) {
+                var dmgDice = (a.damage && a.damage[0]) ? a.damage[0].damage_dice : "";
+                btns = `<div class="atk-btn-row"><button class="atk-btn" onclick="rollAttack('${m.name}', '${a.name}', ${a.attack_bonus})">⚔️ +${a.attack_bonus}</button>${dmgDice ? `<button class="atk-btn dmg-btn" onclick="rollDamage('${m.name}', '${a.name}', '${dmgDice}')">🩸 ${dmgDice}</button>` : ''}</div>`;
+            }
+            actionsHtml += `<div class="action-item"><strong>${a.name}.</strong> ${a.desc} ${btns}</div>`;
+        });
+        if(m.is_custom) actionsHtml += `<div class="add-row"><input type="text" id="newActName" placeholder="Name"><input type="number" id="newActHit" placeholder="Hit" style="width:50px"><input type="text" id="newActDice" placeholder="Dice" style="width:80px"><button class="btn-add-mini" onclick="addCustomAction('${m.index}')">Add</button></div>`;
+
+        content.innerHTML = `<div class="stat-block"><h1>${m.name}</h1><div class="type">${m.is_custom?'Custom':m.size+' '+m.type}</div><div class="red-line"></div><div style="display:flex; justify-content:space-between;"><div><strong>AC</strong> ${m.armor_class[0].value}</div><div><strong>HP</strong> ${m.hit_points}</div><div><strong>Spd</strong> ${m.is_custom?m.speed.walk:JSON.stringify(m.speed).replace(/[{"}]/g,'').replace(/,/g,', ')}</div></div><div class="red-line"></div><div class="stat-grid">${statsHtml}</div><div class="red-line"></div><div class="skill-tags">${skillsHtml}</div><div class="actions"><div class="section-header">Actions</div>${actionsHtml}</div></div>`;
+    }
+</script>
+</body>
+</html>

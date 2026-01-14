@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>D&D Sheet</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: #eee; margin: 0; padding: 20px; display:flex; flex-direction:column; height:100vh; box-sizing:border-box;}
+        
+        /* HEADER */
+        header { background: #252525; padding: 15px 20px; border-bottom: 2px solid #444; display:flex; justify-content:space-between; align-items:center; box-shadow: 0 4px 6px rgba(0,0,0,0.3); z-index: 10; }
+        
+        .char-identity h1 { margin:0; color: #fff; font-size: 1.6em; line-height: 1em; }
+        .char-identity .sub { color: #8af; font-size: 0.8em; font-weight: bold; }
+        
+        .combat-stats { display: flex; align-items: center; gap: 15px; }
+        
+        .stat-badge { text-align:center; border:2px solid #555; border-radius: 8px; width:70px; background:#333; height: 60px; display:flex; flex-direction:column; justify-content:center; position:relative;}
+        .stat-val { font-size:1.4em; font-weight:bold; color:#fff; line-height: 1em; }
+        .stat-label { font-size:0.65em; color:#aaa; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .hp-box { border-color: #4f4; }
+        .hp-input { background:transparent; border:none; color:#4f4; font-size:1em; font-weight:bold; width:100%; text-align:center; cursor:pointer; }
+        .hp-input:focus { outline:none; }
+
+        /* INITIATIVE BOX */
+        .init-box { border-color: #e51e25; cursor: pointer; transition: 0.2s; }
+        .init-box:hover { background: #444; box-shadow: 0 0 8px #e51e25; }
+        .init-box .stat-val { color: #e51e25; }
+
+        /* REST BUTTONS */
+        .rest-group { display: flex; flex-direction: column; gap: 3px; }
+        .btn-rest { border: none; padding: 4px 10px; border-radius: 4px; font-weight: bold; cursor: pointer; color: white; font-size: 0.75em; text-transform: uppercase; }
+        .btn-rest.short { background: #d4af37; color: #111; } .btn-rest.short:hover { background: #e5c048; }
+        .btn-rest.long { background: #2a7a3a; } .btn-rest.long:hover { background: #3a8a4a; }
+        
+        .btn-edit { background: #444; color: white; text-decoration: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; font-size: 0.9em; }
+        .btn-edit:hover { background: #555; }
+
+        /* TABS */
+        .tab-nav { display: flex; background: #1f1f1f; border-bottom: 1px solid #444; }
+        .tab-btn { flex: 1; background: transparent; border: none; color: #888; padding: 15px; font-size: 1em; cursor: pointer; font-weight: bold; border-bottom: 3px solid transparent; transition: 0.2s; }
+        .tab-btn:hover { background: #2a2a2a; color: #ddd; }
+        .tab-btn.active { color: #e51e25; border-bottom-color: #e51e25; background: #252525; }
+        
+        .content-area { flex: 1; overflow-y: auto; padding: 20px; position: relative; }
+        .tab-pane { display: none; max-width: 800px; margin: 0 auto; animation: fadeIn 0.2s; }
+        .tab-pane.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* CARDS */
+        .card { background: #252525; padding: 12px; margin-bottom: 10px; border-radius: 6px; border: 1px solid #444; position: relative; box-shadow: 0 2px 4px rgba(0,0,0,0.2); }
+        .card:hover { border-color: #666; }
+        .card-spell { border-left: 4px solid #8af; }
+        .card-feature { border-left: 4px solid #fa8; }
+        .card-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 5px; }
+        .card-title { font-size: 1.1em; font-weight: bold; color: #fff; }
+        .card-meta { font-size: 0.8em; color: #aaa; }
+        .card-desc { font-size: 0.9em; color: #ccc; font-style: italic; margin-bottom: 10px; padding-left: 8px; border-left: 2px solid #444; }
+        .card-bonus { background: #333; color: #4f4; padding: 2px 6px; border-radius: 4px; font-size: 0.8em; font-weight: bold; }
+
+        .roll-btn-row { display: flex; gap: 5px; }
+        .roll-btn { flex: 1; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold; color: white; font-size: 0.9em; transition: 0.2s; }
+        .btn-hit { background: #2b5fa3; } .btn-hit:hover { background: #3b6fb3; }
+        .btn-dmg { background: #a33; } .btn-dmg:hover { background: #b44; }
+        .btn-heal { background: #2a7a3a; } .btn-heal:hover { background: #3a8a4a; }
+        .btn-effect { background: #444; color:#d4af37; } .btn-effect:hover { background: #555; }
+        
+        .slot-container { background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444; margin-bottom: 20px; }
+        .slot-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; border-bottom: 1px solid #333; }
+        .slot-row:last-child { border-bottom: none; }
+        .slot-lbl { color: #8af; font-weight: bold; font-size: 0.9em; }
+        .slot-bubbles { display: flex; gap: 5px; }
+        .bubble { width: 18px; height: 18px; border-radius: 50%; border: 1px solid #666; cursor: pointer; background: #333; transition: 0.2s; }
+        .bubble.used { background: #8af; border-color: #8af; box-shadow: 0 0 5px #8af; }
+        .bubble.pact { border-color: #d4af37; } .bubble.pact.used { background: #d4af37; border-color: #d4af37; box-shadow: 0 0 5px #d4af37; }
+        .spell-cast-level { width: 100%; background: #1a1a1a; color: #aaa; border: 1px solid #444; padding: 5px; margin-bottom: 5px; border-radius: 4px; }
+
+        .saves-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 5px; margin-bottom: 20px; }
+        .save-box { background: #252525; padding: 8px; border-radius: 4px; text-align: center; border: 1px solid #444; cursor: pointer; }
+        .save-box:hover { background: #333; border-color: #666; }
+        .save-lbl { font-size: 0.7em; color: #888; display: block; margin-bottom: 2px; }
+        .save-val { font-size: 1.2em; font-weight: bold; color: #fff; }
+        
+        .skill-list { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .skill-btn { background: #252525; padding: 8px 12px; border-radius: 4px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; border: 1px solid #333; transition: 0.2s; }
+        .skill-btn:hover { background: #333; border-color: #555; }
+        .skill-name { color: #ddd; }
+        .skill-mod { font-weight: bold; color: #fff; }
+
+        .rp-box { background: #252525; padding: 15px; border-radius: 6px; border: 1px solid #444; margin-bottom: 15px; }
+        .rp-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .rp-item { text-align: center; background: #333; padding: 8px; border-radius: 4px; }
+        .rp-label { display: block; font-size: 0.7em; color: #888; text-transform: uppercase; margin-bottom: 3px; }
+        .rp-val { color: #fff; font-weight: bold; }
+        .bio-text { white-space: pre-wrap; color: #ccc; line-height: 1.6em; }
+
+        #chat { height: 120px; background: #111; border-top: 1px solid #444; padding: 10px; overflow-y: scroll; font-family: monospace; font-size: 0.9em; }
+        .msg { margin-bottom: 4px; padding: 4px 8px; border-left: 3px solid #555; }
+        .res-hit { color: #8af; font-weight: bold; } .res-dmg { color: #e51e25; font-weight: bold; } 
+        .res-heal { color: #4f4; font-weight: bold; } .res-eff { color: #d4af37; font-weight: bold; }
+        .charge-ctrl { display:flex; justify-content:space-between; align-items:center; margin-top:5px; background:#222; padding:3px; border-radius:4px; }
+        .charge-btn { background:none; border:none; color:#888; cursor:pointer; font-weight:bold; } .charge-btn:hover { color:#fff; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="char-identity">
+        <h1>{{ char.name }}</h1>
+        <div id="classDisplay" class="sub">Level 1 Character</div>
+    </div>
+    
+    <div class="combat-stats">
+        <div class="rest-group">
+            <button class="btn-rest short" onclick="shortRest()">Short</button>
+            <button class="btn-rest long" onclick="longRest()">Long</button>
+        </div>
+        
+        <div class="stat-badge hp-box">
+            <div class="stat-val"><input type="number" id="hpInput" class="hp-input" value="{{ char.hp_curr }}" onchange="updateHP()"></div>
+            <div class="stat-label">/ {{ char.hp_max }} HP</div>
+        </div>
+        
+        <div class="stat-badge">
+            <div class="stat-val" id="dispAC">10</div>
+            <div class="stat-label">AC</div>
+        </div>
+
+        <div class="stat-badge init-box" onclick="rollInit()">
+            <div class="stat-val" id="dispInit">+0</div>
+            <div class="stat-label">Init</div>
+        </div>
+        
+        <a href="/builder" class="btn-edit">Edit</a>
+    </div>
+</header>
+
+<div class="tab-nav">
+    <button class="tab-btn active" onclick="openTab('tab-actions')">⚔️ Actions</button>
+    <button class="tab-btn" onclick="openTab('tab-spells')">✨ Spells</button>
+    <button class="tab-btn" onclick="openTab('tab-skills')">🎲 Skills & Saves</button>
+    <button class="tab-btn" onclick="openTab('tab-rp')">📜 Roleplay</button>
+</div>
+
+<div class="content-area">
+
+    <div id="tab-actions" class="tab-pane active">
+        <h3 style="color:#e51e25; border-bottom:1px solid #444; margin-bottom:10px;">Attacks & Features</h3>
+        <div id="attackList"></div>
+        <div id="featureList"></div>
+    </div>
+
+    <div id="tab-spells" class="tab-pane">
+        <div id="slotTracker" class="slot-container"></div>
+        <div id="spellList"></div>
+    </div>
+
+    <div id="tab-skills" class="tab-pane">
+        <h3 style="color:#e51e25; border-bottom:1px solid #444; margin-bottom:10px;">Saving Throws</h3>
+        <div class="saves-grid" id="savesList"></div>
+        
+        <h3 style="color:#e51e25; border-bottom:1px solid #444; margin:20px 0 10px 0;">Skills</h3>
+        <div class="skill-list" id="skillList"></div>
+    </div>
+
+    <div id="tab-rp" class="tab-pane">
+        <div class="rp-box">
+            <div class="rp-grid">
+                <div class="rp-item"><span class="rp-label">Race</span><div class="rp-val">{{ char.race }}</div></div>
+                <div class="rp-item"><span class="rp-label">Alignment</span><div class="rp-val">{{ char.alignment }}</div></div>
+                <div class="rp-item"><span class="rp-label">Faith</span><div class="rp-val">{{ char.faith }}</div></div>
+                <div class="rp-item"><span class="rp-label">Background</span><div class="rp-val">-</div></div>
+            </div>
+            <div class="rp-grid">
+                <div class="rp-item"><span class="rp-label">Eyes</span><div class="rp-val">{{ char.eyes }}</div></div>
+                <div class="rp-item"><span class="rp-label">Hair</span><div class="rp-val">{{ char.hair }}</div></div>
+                <div class="rp-item"><span class="rp-label">Skin</span><div class="rp-val">{{ char.skin }}</div></div>
+                <div class="rp-item"><span class="rp-label">Height</span><div class="rp-val">{{ char.height }}</div></div>
+            </div>
+            <h3 style="color:#8af; border-bottom:1px solid #444; margin-bottom:10px;">Backstory & Notes</h3>
+            <div class="bio-text">{{ char.backstory }}</div>
+        </div>
+    </div>
+
+</div>
+
+<div id="chat"></div>
+
+<script>
+    var socket = io();
+    var ACTIONS = {{ actions | tojson }};
+    var SKILLS = {{ skills | tojson }};
+    var CHAR = {{ char | tojson }};
+    var RACES = {{ races | tojson }}; 
+    
+    var currentMods = {}; var profBonus = 2; var isMonk = false; var characterLevel = 1;
+    var initBonus = 0; // Global init bonus
+
+    const SLOT_TABLE = [ [0,0,0,0,0,0,0,0,0], [2,0,0,0,0,0,0,0,0], [3,0,0,0,0,0,0,0,0], [4,2,0,0,0,0,0,0,0], [4,3,0,0,0,0,0,0,0], [4,3,2,0,0,0,0,0,0], [4,3,3,0,0,0,0,0,0], [4,3,3,1,0,0,0,0,0], [4,3,3,2,0,0,0,0,0], [4,3,3,3,1,0,0,0,0], [4,3,3,3,2,0,0,0,0], [4,3,3,3,2,1,0,0,0], [4,3,3,3,2,1,0,0,0], [4,3,3,3,2,1,1,0,0], [4,3,3,3,2,1,1,0,0], [4,3,3,3,2,1,1,1,0], [4,3,3,3,2,1,1,1,0], [4,3,3,3,2,1,1,1,1], [4,3,3,3,3,1,1,1,1], [4,3,3,3,3,2,1,1,1], [4,3,3,3,3,2,2,1,1] ];
+
+    // TABS
+    function openTab(id) {
+        document.querySelectorAll('.tab-pane').forEach(el => el.classList.remove('active'));
+        document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+        document.getElementById(id).classList.add('active');
+        event.target.classList.add('active');
+    }
+
+    // STATS & RENDERING
+    function calcStats() {
+        var raceData = RACES[CHAR.race] || {bonuses:{}};
+        ['STR','DEX','CON','INT','WIS','CHA'].forEach(s => {
+            var b = CHAR.base_stats[s];
+            var t = b + (raceData.bonuses[s]||0);
+            currentMods[s] = Math.floor((t-10)/2);
+        });
+        
+        var totalLvl = 0; var txt = []; isMonk = false;
+        
+        // Calculate Init Bonus (DEX + Subclass bonuses)
+        initBonus = currentMods['DEX'];
+        
+        CHAR.classes.forEach(c => { 
+            totalLvl += c.level; 
+            txt.push(`${c.name} ${c.level}` + (c.subclass!=='-' ? ` (${c.subclass})` : '')); 
+            if(c.name === "Monk") isMonk = true; 
+            
+            // Subclass Init Logic
+            if(c.subclass === "Gloom Stalker") initBonus += currentMods['WIS'];
+            if(c.subclass === "War Magic") initBonus += currentMods['INT'];
+            if(c.subclass === "Swashbuckler") initBonus += currentMods['CHA'];
+        });
+
+        characterLevel = totalLvl; profBonus = Math.floor((totalLvl - 1) / 4) + 2; if(totalLvl===0) profBonus=2;
+        document.getElementById('classDisplay').innerText = txt.join(' / ');
+        
+        // Display Init
+        document.getElementById('dispInit').innerText = (initBonus >= 0 ? "+" : "") + initBonus;
+        
+        // AC
+        var ac = 10 + currentMods['DEX']; var shield = 0; var armored = false;
+        CHAR.inventory.forEach(i => { if(!i.equip) return; var act = ACTIONS.find(a => a.name === i.name); if(act && act.category === "Armor") { armored = true; if(act.armor_type === "Light") ac = act.ac + currentMods['DEX']; else if(act.armor_type === "Medium") ac = act.ac + Math.min(currentMods['DEX'], 2); else if(act.armor_type === "Heavy") ac = act.ac; else if(act.armor_type === "Shield") shield += act.ac; } });
+        if(isMonk && !armored && shield===0) ac = 10 + currentMods['DEX'] + currentMods['WIS'];
+        document.getElementById('dispAC').innerText = ac + shield;
+        
+        renderSlots(); renderCards(); renderSkills();
+    }
+
+    // INIT ROLLER
+    function rollInit() {
+        socket.emit('roll_action', {user: CHAR.name, type: 'skill', lbl: 'Initiative', mod: initBonus});
+    }
+
+    function renderCards() {
+        var atk = document.getElementById('attackList'); var spl = document.getElementById('spellList'); var feat = document.getElementById('featureList');
+        atk.innerHTML = ""; spl.innerHTML = ""; feat.innerHTML = "";
+
+        CHAR.inventory.forEach(item => {
+            if(!item.equip) return;
+            var data = ACTIONS.find(a => a.name === item.name); if(!data || data.category === "Armor") return;
+            
+            var useStat = data.stat; var useDice = data.dice;
+            if(isMonk) { if(item.name === "Unarmed Strike") { useStat="DEX"; useDice="1d4"; } else if(data.category.includes("Simple") && !data.category.includes("Ranged")) { useStat="DEX"; } }
+            if(data.category === "Spell" && !useStat) useStat = "INT"; 
+            var mod = currentMods[useStat] || 0; var hitBonus = mod + (item.prof ? profBonus : 0); var dmgStr = (useDice === '-') ? "Effect" : `${useDice} ${mod>=0?'+':''}${mod}`;
+            
+            var div = document.createElement('div'); div.className = "card";
+            if(data.category === "Spell") div.className += " card-spell"; if(data.action_type === "Bonus Action") div.className += " card-feature";
+            
+            var chargeHtml = "";
+            if(data.category === "Feature" && !data.action_type.includes("Passive")) {
+                var curC = CHAR.charges[item.name] || 0;
+                chargeHtml = `<div class="charge-ctrl"><button class="charge-btn" onclick="updateCharge('${item.name}', -1); event.stopPropagation()">-</button><span class="charge-val">Used: ${curC}</span><button class="charge-btn" onclick="updateCharge('${item.name}', 1); event.stopPropagation()">+</button></div>`;
+            }
+            
+            var upcastHtml = "";
+            if(data.scale_dice) {
+                if(data.level === 0) {
+                    var tier = Math.floor((characterLevel + 7) / 6);
+                    if(tier > 1 && data.scale_dice.includes('d')) { var parts = data.scale_dice.split('d'); dmgStr = `${tier}d${parts[1]} ${mod>=0?'+':''}${mod}`; }
+                } else {
+                    upcastHtml = `<select class="spell-cast-level" onclick="event.stopPropagation()">`;
+                    for(var i=data.level; i<=9; i++) upcastHtml += `<option value="${i}">Lvl ${i} Slot</option>`;
+                    upcastHtml += `</select>`;
+                }
+            }
+            
+            var descHtml = data.desc ? `<div class="card-desc">${data.desc}</div>` : '';
+            
+            var btnHtml = "";
+            if(data.type === "Healing") {
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-heal" onclick="roll(this, 'heal', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, ${data.level})">💚 Heal (${dmgStr})</button></div>`;
+            } else if (data.desc && data.desc.includes("Save")) {
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-dmg" onclick="roll(this, 'dmg', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, ${data.level})">🔥 Roll Dmg (${dmgStr})</button></div>`;
+            } else if(data.dice !== '-') {
+                var hitLabel = (hitBonus >= 0 ? "+" : "") + hitBonus;
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-hit" onclick="roll(this, 'hit', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, 0)">⚔️ Hit (${hitLabel})</button><button class="roll-btn btn-dmg" onclick="roll(this, 'dmg', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, ${data.level})">🩸 Dmg (${dmgStr})</button></div>`;
+            } else { 
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-effect" onclick="roll(this, 'effect', '${item.name}', 0, '-', 0, 0)">Use Feature</button></div>`; 
+            }
+            if(["Buff", "Debuff", "Utility", "Sleep"].includes(data.type)) {
+                 btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-effect" style="color:#d4af37" onclick="roll(this, 'dice_effect', '${item.name}', 0, '${data.dice}', 0, ${data.level})">✨ Roll Effect (${dmgStr})</button></div>`;
+            }
+
+            var html = `<div class="card-header"><span class="card-title">${item.name}</span>${(data.dice!=='-' && data.type!=='Healing' && !data.desc.includes('Save')) ? '<span class="card-bonus">'+(hitBonus>=0?'+':'')+hitBonus+'</span>':''}</div>
+                        ${descHtml}
+                        <span class="card-meta">${data.type} | ${data.category}</span>
+                        ${upcastHtml}
+                        ${btnHtml}
+                        ${chargeHtml}`;
+            div.innerHTML = html;
+            
+            if(data.category === "Spell") spl.appendChild(div);
+            else if(data.category === "Feature") feat.appendChild(div); 
+            else atk.appendChild(div);
+        });
+    }
+
+    function renderSkills() {
+        var cont = document.getElementById('skillList'); cont.innerHTML = "";
+        Object.keys(SKILLS).sort().forEach(sk => {
+            var stat = SKILLS[sk]; var mod = currentMods[stat] || 0; if(CHAR.skills.includes(sk)) mod += profBonus;
+            var btn = document.createElement('div'); btn.className = 'skill-btn';
+            btn.innerHTML = `<span class="skill-name">${sk} <small style="color:#666">(${stat})</small></span> <span class="skill-mod">${mod>=0?'+':''}${mod}</span>`;
+            btn.onclick = () => socket.emit('roll_action', {user: CHAR.name, type: 'skill', lbl: sk, mod: mod});
+            cont.appendChild(btn);
+        });
+
+        var sCont = document.getElementById('savesList'); sCont.innerHTML = "";
+        ['STR','DEX','CON','INT','WIS','CHA'].forEach(s => {
+            var mod = currentMods[s] || 0; 
+            if(CHAR.saves && CHAR.saves.includes(s)) mod += profBonus;
+            var box = document.createElement('div'); box.className = 'save-box';
+            box.innerHTML = `<span class="save-lbl">${s}</span><span class="save-val">${mod>=0?'+':''}${mod}</span>`;
+            box.onclick = () => socket.emit('roll_action', {user: CHAR.name, type: 'skill', lbl: s + ' Save', mod: mod});
+            sCont.appendChild(box);
+        });
+    }
+
+    function updateHP() { var val = document.getElementById('hpInput').value; socket.emit('update_char_data', { user: CHAR.name, key: 'hp_curr', val: val }); }
+    function longRest() { if(confirm("Long Rest?")) socket.emit('long_rest', { user: CHAR.name }); }
+    function shortRest() { if(confirm("Short Rest?")) socket.emit('short_rest', { user: CHAR.name }); }
+    function toggleSlot(lvl, idx) {
+        var key = (lvl === 'pact') ? 'pact' : lvl.toString();
+        var currentUsed = CHAR.slots_used[key] || 0;
+        var newUsed = (idx + 1 === currentUsed) ? idx : idx + 1;
+        CHAR.slots_used[key] = newUsed;
+        socket.emit('update_char_data', { user: CHAR.name, key: 'slots_used', val: CHAR.slots_used });
+        renderSlots();
+    }
+    function updateCharge(featName, delta) {
+        var cur = CHAR.charges[featName] || 0; var newVal = Math.max(0, cur + delta);
+        CHAR.charges[featName] = newVal;
+        socket.emit('update_char_data', { user: CHAR.name, key: 'charges', val: CHAR.charges });
+        renderCards();
+    }
+
+    function renderSlots() {
+        var div = document.getElementById('slotTracker'); div.innerHTML = "";
+        var effLvl = 0; var pactLvl = 0; var pactSlots = 0; var pactTier = 0;
+        CHAR.classes.forEach(c => {
+            if(['Bard','Cleric','Druid','Sorcerer','Wizard'].includes(c.name)) effLvl += c.level;
+            else if(['Paladin','Ranger','Artificer'].includes(c.name)) effLvl += Math.floor(c.level/2);
+            else if(['Fighter','Rogue'].includes(c.name)) effLvl += Math.floor(c.level/3);
+            if(c.name === 'Warlock') { pactLvl = c.level; if(pactLvl >= 1) { pactSlots = 1; pactTier = 1; } if(pactLvl >= 2) pactSlots = 2; if(pactLvl >= 11) pactSlots = 3; if(pactLvl >= 17) pactSlots = 4; if(pactLvl >= 3) pactTier = 2; if(pactLvl >= 5) pactTier = 3; if(pactLvl >= 7) pactTier = 4; if(pactLvl >= 9) pactTier = 5; }
+        });
+        if(effLvl > 0) {
+            var slots = SLOT_TABLE[Math.min(effLvl, 20)];
+            for(var i=0; i<slots.length; i++) {
+                if(slots[i] > 0) {
+                    var lvl = i+1; var used = CHAR.slots_used[lvl.toString()] || 0;
+                    var html = `<div class="slot-row"><span class="slot-lbl">Lvl ${lvl}</span><div class="slot-bubbles">`;
+                    for(var b=0; b<slots[i]; b++) { var cls = (b < used) ? "bubble used" : "bubble"; html += `<div class="${cls}" onclick="toggleSlot(${lvl}, ${b})"></div>`; }
+                    html += `</div></div>`; div.innerHTML += html;
+                }
+            }
+        }
+        if(pactSlots > 0) {
+            var used = CHAR.slots_used['pact'] || 0;
+            var html = `<div class="slot-row"><span class="slot-lbl" style="color:#d4af37">Pact (L${pactTier})</span><div class="slot-bubbles">`;
+            for(var b=0; b<pactSlots; b++) { var cls = (b < used) ? "bubble pact used" : "bubble pact"; html += `<div class="${cls}" onclick="toggleSlot('pact', ${b})"></div>`; }
+            html += `</div></div>`; div.innerHTML += html;
+        }
+    }
+    function renderCards() {
+        var atk = document.getElementById('attackList'); var spl = document.getElementById('spellList'); var feat = document.getElementById('featureList');
+        atk.innerHTML = ""; spl.innerHTML = ""; feat.innerHTML = "";
+
+        CHAR.inventory.forEach(item => {
+            if(!item.equip) return;
+            
+            // Prefer saved stats from API, fallback to ACTIONS
+            var data = item.stats; 
+            if(!data) data = ACTIONS.find(a => a.name === item.name);
+            
+            if(!data) return; // Skip if no data found
+            
+            // ... rest of render logic is the same ...
+            var useStat = data.stat; var useDice = data.dice;
+            if(isMonk) { if(item.name === "Unarmed Strike") { useStat="DEX"; useDice="1d4"; } else if(data.category.includes("Simple") && !data.category.includes("Ranged")) { useStat="DEX"; } }
+            if(data.category === "Spell" && !useStat) useStat = "INT"; 
+            var mod = currentMods[useStat] || 0; var hitBonus = mod + (item.prof ? profBonus : 0); var dmgStr = (useDice === '-') ? "Effect" : `${useDice} ${mod>=0?'+':''}${mod}`;
+            
+            var div = document.createElement('div'); div.className = "card";
+            if(data.category === "Spell") div.className += " card-spell"; if(data.action_type === "Bonus Action") div.className += " card-feature";
+            
+            var chargeHtml = "";
+            if(data.category === "Feature" && !data.action_type.includes("Passive")) {
+                var curC = CHAR.charges[item.name] || 0;
+                chargeHtml = `<div class="charge-ctrl"><button class="charge-btn" onclick="updateCharge('${item.name}', -1); event.stopPropagation()">-</button><span class="charge-val">Used: ${curC}</span><button class="charge-btn" onclick="updateCharge('${item.name}', 1); event.stopPropagation()">+</button></div>`;
+            }
+            
+            var upcastHtml = "";
+            if(data.scale_dice) {
+                if(data.level === 0) {
+                    var tier = Math.floor((characterLevel + 7) / 6);
+                    if(tier > 1 && data.scale_dice.includes('d')) { var parts = data.scale_dice.split('d'); dmgStr = `${tier}d${parts[1]} ${mod>=0?'+':''}${mod}`; }
+                } else {
+                    upcastHtml = `<select class="spell-cast-level" onclick="event.stopPropagation()">`;
+                    for(var i=data.level; i<=9; i++) upcastHtml += `<option value="${i}">Lvl ${i} Slot</option>`;
+                    upcastHtml += `</select>`;
+                }
+            }
+            
+            var descHtml = data.desc ? `<div class="card-desc">${data.desc}</div>` : '';
+            
+            var btnHtml = "";
+            if(data.type === "Healing") {
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-heal" onclick="roll(this, 'heal', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, ${data.level})">💚 Heal (${dmgStr})</button></div>`;
+            } else if (data.desc && data.desc.includes("Save")) {
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-dmg" onclick="roll(this, 'dmg', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, ${data.level})">🔥 Roll Dmg (${dmgStr})</button></div>`;
+            } else if(data.dice !== '-') {
+                var hitLabel = (hitBonus >= 0 ? "+" : "") + hitBonus;
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-hit" onclick="roll(this, 'hit', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, 0)">⚔️ Hit (${hitLabel})</button><button class="roll-btn btn-dmg" onclick="roll(this, 'dmg', '${item.name}', ${hitBonus}, '${data.dice}', ${mod}, ${data.level})">🩸 Dmg (${dmgStr})</button></div>`;
+            } else { 
+                btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-effect" onclick="roll(this, 'effect', '${item.name}', 0, '-', 0, 0)">Use Feature</button></div>`; 
+            }
+            if(["Buff", "Debuff", "Utility", "Sleep"].includes(data.type)) {
+                 btnHtml = `<div class="roll-btn-row"><button class="roll-btn btn-effect" style="color:#d4af37" onclick="roll(this, 'dice_effect', '${item.name}', 0, '${data.dice}', 0, ${data.level})">✨ Roll Effect (${dmgStr})</button></div>`;
+            }
+
+            var html = `<div class="card-header"><span class="card-title">${item.name}</span>${(data.dice!=='-' && data.type!=='Healing' && !data.desc.includes('Save')) ? '<span class="card-bonus">'+(hitBonus>=0?'+':'')+hitBonus+'</span>':''}</div>
+                        ${descHtml}
+                        <span class="card-meta">${data.type} | ${data.category}</span>
+                        ${upcastHtml}
+                        ${btnHtml}
+                        ${chargeHtml}`;
+            div.innerHTML = html;
+            
+            if(data.category === "Spell") spl.appendChild(div);
+            else if(data.category === "Feature") feat.appendChild(div); 
+            else atk.appendChild(div);
+        });
+    }
+
+    function roll(btn, rollType, name, hitMod, diceStr, dmgMod, baseLvl) {
+        var actionData = ACTIONS.find(a => a.name === name); var scaleDice = actionData ? actionData.scale_dice : null;
+        var castLvl = baseLvl; var card = btn.closest('.card'); var sel = card.querySelector('select'); if(sel) castLvl = parseInt(sel.value);
+        socket.emit('roll_action', { user: CHAR.name, type: 'attack_split', sub_type: rollType, lbl: name, hit_mod: hitMod, dmg_mod: dmgMod, dice: diceStr, cast_lvl: castLvl, base_lvl: baseLvl, scale_dice: scaleDice });
+    }
+
+    socket.on('rest_completed', function(d) { CHAR.hp_curr = d.hp; CHAR.slots_used = d.slots; CHAR.charges = d.charges; document.getElementById('hpInput').value = d.hp; renderSlots(); renderCards(); });
+    socket.on('update_slots_client', function(newSlots) { CHAR.slots_used = newSlots; renderSlots(); });
+    socket.on('roll_result', function(d) {
+        var c = document.getElementById('chat');
+        var html = `<div class="msg"><strong>${d.user}</strong>: ${d.lbl}`;
+        if(d.sub_type === 'hit') { var cls = d.nat20 ? 'res-crit' : 'res-hit'; var txt = d.nat20 ? 'CRITICAL!' : d.val; html += ` rolled <strong>To Hit</strong> -> <span class="${cls}">${txt}</span> <small>(${d.formula})</small>`; } 
+        else if(d.sub_type === 'dmg') { html += ` rolled <strong>Damage</strong> -> <span class="res-dmg">${d.val}</span> <small>(${d.formula})</small>`; } 
+        else if(d.sub_type === 'heal') { html += ` rolled <strong>Healing</strong> -> <span class="res-heal">${d.val}</span> <small>(${d.formula})</small>`; } 
+        else if(d.sub_type === 'dice_effect') { html += ` rolled <strong>Effect</strong> -> <span class="res-eff">${d.val}</span> <small>(${d.formula})</small>`; } 
+        else if(d.sub_type === 'effect') { html += ` used effect.`; }
+        else { html += ` -> <b>${d.val || d.tot}</b>`; }
+        html += `</div>`; c.innerHTML += html; c.scrollTop = c.scrollHeight;
+    });
+
+    window.onclick = function(event) { var modal = document.getElementById('bioModal'); if (event.target == modal) { modal.style.display = "none"; } }
+    window.onload = calcStats;
+</script>
+</body>
+</html>

@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>D&D Lobby</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #111; color: #eee; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; }
+        .container { background: #252525; padding: 40px; border-radius: 10px; border: 1px solid #444; width: 400px; text-align: center; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+        h1 { color: #e51e25; margin-bottom: 20px; }
+        .split { display: flex; gap: 20px; margin-top: 20px; }
+        .col { flex: 1; }
+        input { width: 100%; padding: 10px; margin-bottom: 10px; background: #333; border: 1px solid #555; color: white; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 10px; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; transition: 0.2s; color: white; }
+        .btn-create { background: #2b5fa3; } .btn-create:hover { background: #3b6fb3; }
+        .btn-join { background: #e51e25; } .btn-join:hover { background: #f62f36; }
+        .divider { margin: 20px 0; border-top: 1px solid #444; position: relative; }
+        .divider span { position: absolute; top: -10px; left: 50%; transform: translateX(-50%); background: #252525; padding: 0 10px; color: #888; font-size: 0.8em; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>D&D Portal</h1>
+        
+        <input type="text" id="joinCode" placeholder="Enter Invite Code / Link">
+        <button class="btn-join" onclick="join()">Join Campaign</button>
+        
+        <div class="divider"><span>OR</span></div>
+        
+        <form action="/create_campaign" method="post">
+            <input type="text" name="campaign_name" placeholder="Campaign Name" required>
+            <button type="submit" class="btn-create">Create New Campaign</button>
+        </form>
+    </div>
+
+    <script>
+        function join() {
+            var val = document.getElementById('joinCode').value;
+            if(!val) return;
+            // extract code from full url if pasted
+            var parts = val.split('/');
+            var code = parts[parts.length-1];
+            if(val.includes('join')) code = parts[parts.length-1]; 
+            window.location.href = `/join/${code}`;
+        }
+    </script>
+</body>
+</html>

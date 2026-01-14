@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Character Builder</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a1a; color: #eee; margin: 0; padding: 0; height: 100vh; display: flex; flex-direction: column; }
+        .top-bar { background: #252525; padding: 15px; border-bottom: 2px solid #e51e25; display: flex; justify-content: space-between; align-items: center; }
+        h1 { margin: 0; font-size: 1.5em; color: #fff; }
+        .progress-steps { display: flex; gap: 5px; }
+        .step-dot { width: 30px; height: 30px; border-radius: 50%; background: #444; color: #888; display: flex; align-items: center; justify-content: center; font-weight: bold; border: 2px solid #444; }
+        .step-dot.active { background: #e51e25; color: white; border-color: #fff; }
+        .step-dot.completed { background: #2b5fa3; color: white; border-color: #2b5fa3; }
+        .content-area { flex: 1; padding: 20px; overflow-y: auto; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; }
+        .step-section { display: none; animation: fadeIn 0.3s; }
+        .step-section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .box { background: #252525; padding: 20px; border-radius: 8px; border: 1px solid #444; margin-bottom: 20px; }
+        label { display: block; font-size: 0.9em; color: #aaa; margin-bottom: 5px; margin-top: 10px; }
+        input, select, textarea { background: #333; border: 1px solid #555; color: white; padding: 10px; border-radius: 4px; width: 100%; box-sizing: border-box; font-family: inherit; font-size: 1em; }
+        textarea { resize: vertical; min-height: 100px; }
+        .stat-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; text-align: center; }
+        .stat-box { background: #333; padding: 10px; border-radius: 5px; }
+        .mod-disp { font-size: 1.5em; font-weight: bold; color: #e51e25; margin-top: 5px; }
+        .nav-footer { background: #252525; padding: 15px; border-top: 1px solid #444; display: flex; justify-content: space-between; }
+        .btn { background: #444; color: white; border: none; padding: 12px 25px; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 1em; transition: 0.2s; }
+        .btn:hover { background: #555; }
+        .btn-next { background: #2b5fa3; }
+        .btn-save { background: #e51e25; }
+        
+        .item-row { display: flex; justify-content: space-between; align-items: center; background: #333; padding: 8px; margin-bottom: 5px; border-radius: 4px; }
+        .skill-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+        .skill-lbl { display: flex; align-items: center; gap: 8px; font-size: 0.9em; cursor: pointer; padding: 8px; border-radius: 4px; background: #333; border: 1px solid #444; }
+        .skill-lbl:hover { background: #3a3a3a; }
+        .skill-lbl input { width: auto; margin: 0; }
+        .highlight { border-color: #4f4; color: #4f4; } 
+        .class-opt { border-color: #8af; color: #8af; }
+        .inv-cat-header { color: #8af; font-size: 0.8em; text-transform: uppercase; border-bottom: 1px solid #555; margin: 10px 0 5px 0; padding-bottom: 2px; }
+        .limit-warn { color: #f44; font-weight: bold; }
+        
+        .auto-btn-row { display: flex; gap: 10px; margin-bottom: 15px; }
+        .btn-blue { background: #2b5fa3; flex: 1; font-size: 0.9em; }
+        .btn-blue:hover { background: #3b6fb3; }
+        
+        .api-search-res { max-height: 200px; overflow-y: auto; background: #111; border: 1px solid #444; display: none; }
+        .api-item { padding: 5px; cursor: pointer; border-bottom: 1px solid #333; }
+        .api-item:hover { background: #2b5fa3; }
+    </style>
+</head>
+<body>
+
+<div class="top-bar">
+    <h1>Character Builder</h1>
+    <div class="progress-steps">
+        <div class="step-dot active" id="dot1">1</div><div class="step-dot" id="dot2">2</div><div class="step-dot" id="dot3">3</div><div class="step-dot" id="dot4">4</div><div class="step-dot" id="dot5">5</div><div class="step-dot" id="dot6">6</div>
+    </div>
+</div>
+
+<form action="/save_char" method="post" id="charForm" class="content-area">
+    <input type="hidden" name="room" value="{{ room }}">
+    <div id="step1" class="step-section active">
+        <div class="box">
+            <h2>Identity</h2>
+            <div style="display:flex; gap:10px;"><div style="flex:1"><label>Name</label><input type="text" name="name" value="{{ char.name }}"></div><div style="flex:1"><label>Species</label><select name="race" id="raceSelect" onchange="recalc()"><option value="-">-</option>{% for r in races %}<option value="{{ r }}" {% if char.race == r %}selected{% endif %}>{{ r }}</option>{% endfor %}</select></div></div>
+            <div style="display:flex; gap:10px;"><div style="flex:1"><label>Alignment</label><select name="alignment">{% for a in ['Unaligned','Lawful Good','Neutral Good','Chaotic Good','Lawful Neutral','True Neutral','Chaotic Neutral','Lawful Evil','Neutral Evil','Chaotic Evil'] %}<option value="{{ a }}" {% if char.alignment == a %}selected{% endif %}>{{ a }}</option>{% endfor %}</select></div><div style="flex:1"><label>Faith</label><input type="text" name="faith" value="{{ char.faith }}"></div></div>
+            <div style="display:grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap:10px;"><div><label>Eyes</label><input type="text" name="eyes" value="{{ char.eyes }}"></div><div><label>Hair</label><input type="text" name="hair" value="{{ char.hair }}"></div><div><label>Skin</label><input type="text" name="skin" value="{{ char.skin }}"></div><div><label>Height</label><input type="text" name="height" value="{{ char.height }}"></div></div>
+            <label>Backstory</label><textarea name="backstory">{{ char.backstory }}</textarea>
+            <div style="margin-top:20px; padding:10px; border:1px solid #444;"><label style="margin-top:0;">Load Character</label><select onchange="window.location.href='/load_post?id='+this.value"><option disabled selected>Select...</option>{% for c in saved %}<option value="{{ c.id }}">{{ c.name }}</option>{% endfor %}</select></div>
+        </div>
+    </div>
+
+    <div id="step2" class="step-section">
+        <div class="box">
+            <div style="display:flex; justify-content:space-between;"><h2>Stats</h2><select id="statMode" onchange="toggleStatMode()" style="width:auto;"><option value="manual">Manual</option><option value="array">Array</option></select></div>
+            <div class="stat-grid" id="statsManual">{% for s in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] %}<div class="stat-box"><label>{{ s }}</label><input type="number" id="manual_{{ s }}" value="{{ char.base_stats[s] }}" oninput="syncStat('{{ s }}', this.value)"><div class="mod-disp" id="mod_{{ s }}">+0</div><label style="font-size:0.7em; display:flex; align-items:center; justify-content:center; gap:5px;"><input type="checkbox" class="save-prof" data-stat="{{ s }}" style="width:auto;"> Save</label></div>{% endfor %}</div>
+            <div class="stat-grid" id="statsArray" style="display:none;">{% for s in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] %}<div class="stat-box"><label>{{ s }}</label><select id="array_{{ s }}" onchange="syncStat('{{ s }}', this.value)"><option value="-" disabled selected>-</option><option value="15">15</option><option value="14">14</option><option value="13">13</option><option value="12">12</option><option value="10">10</option><option value="8">8</option></select><div class="mod-disp" id="mod_arr_{{ s }}">+0</div></div>{% endfor %}</div>
+            {% for s in ['STR', 'DEX', 'CON', 'INT', 'WIS', 'CHA'] %}<input type="hidden" name="base_{{ s }}" id="base_{{ s }}" value="{{ char.base_stats[s] }}">{% endfor %}
+            <div style="display:flex; gap:20px; margin-top:15px; border-top:1px solid #444; padding-top:10px;"><div style="flex:1; text-align:center;"><label style="color:#4f4; font-weight:bold;">Max HP (Auto)</label><input type="number" name="hp_max" id="hpMaxInput" value="{{ char.hp_max }}" style="font-size:1.5em; text-align:center;"></div><div style="flex:1; text-align:center;"><label>Current HP</label><input type="number" name="hp_curr" value="{{ char.hp_curr }}" style="font-size:1.5em; text-align:center;"></div></div>
+        </div>
+    </div>
+
+    <div id="step3" class="step-section">
+        <div class="box"><h2>Classes</h2><div id="classContainer"></div><div style="display:flex; gap:10px; margin-top:15px;"><select id="newClassSelect" style="flex:1;">{% for c in classes %}<option value="{{ c }}">{{ c }}</option>{% endfor %}</select><button type="button" class="btn" onclick="addClassRow()">Add Class</button></div></div>
+    </div>
+
+    <div id="step4" class="step-section">
+        <div class="box"><h2>Proficiencies</h2><p style="color:#aaa;"><span style="color:#4f4">Green</span>=Species. <span style="color:#8af">Blue</span>=Class.</p><div class="skill-grid">{% for skill, stat in skills_list.items() %}<label class="skill-lbl" id="lbl_{{skill}}"><input type="checkbox" class="skill-check" data-name="{{ skill }}" onchange="recalc()"> <span>{{ skill }} <small style="color:#666">({{ stat }})</small></span></label>{% endfor %}</div></div>
+    </div>
+
+    <div id="step5" class="step-section">
+        <div class="box">
+            <h2>Equipment</h2>
+            <div class="auto-btn-row"><button type="button" class="btn btn-blue" onclick="addStartingGear()">+ Add Starting Equipment</button></div>
+            <div style="display:flex; gap:10px;"><input type="text" id="equipSearch" placeholder="Search 5e Weapons/Armor (API)..." onkeyup="searchAPI('equip')"></div>
+            <div id="equipResults" class="api-search-res"></div>
+            <div style="margin-top:15px; border:1px solid #444; padding:10px; border-radius:4px; background:#222; min-height:100px;">
+                <div id="listWeapons"><div class="inv-cat-header">Inventory</div></div>
+            </div>
+        </div>
+    </div>
+
+    <div id="step6" class="step-section">
+        <div class="box">
+            <h2>Spells</h2>
+            <div class="auto-btn-row">
+                <button type="button" class="btn btn-blue" onclick="addFixedSpells()">+ Add Fixed Spells (Race/Subclass)</button>
+            </div>
+            
+            <div style="display:flex; gap:10px; margin-bottom:10px;">
+                <select id="spellClassFilter" style="flex:1; border-color:#8af" onchange="populateSpellDropdown()">
+                    <option value="" disabled selected>Filter by Class</option>
+                    {% for c in classes %}<option value="{{ c }}">{{ c }}</option>{% endfor %}
+                </select>
+                <select id="spellLevelFilter" style="width:100px;" onchange="populateSpellDropdown()">
+                    <option value="0">Cantrip</option><option value="1">Lvl 1</option><option value="2">Lvl 2</option><option value="3">Lvl 3</option><option value="4">Lvl 4</option><option value="5">Lvl 5</option><option value="6">Lvl 6</option><option value="7">Lvl 7</option><option value="8">Lvl 8</option><option value="9">Lvl 9</option>
+                </select>
+            </div>
+            
+            <div style="display:flex; gap:10px;">
+                <select id="spellPicker" style="flex:3;"><option disabled selected>-- Select Spell (Local) --</option></select>
+                <button type="button" class="btn" onclick="addSelectedSpell()">Add</button>
+            </div>
+            
+            <div style="margin-top:15px; border:1px solid #444; padding:10px; border-radius:4px; background:#222; min-height:100px;">
+                <div id="listCantrips"><div class="inv-cat-header">Cantrips</div></div>
+                <div id="listSpells"><div class="inv-cat-header">Leveled Spells</div></div>
+            </div>
+            <div id="limitDisplay" style="text-align:right; font-size:0.9em; color:#aaa; margin-top:5px;"></div>
+        </div>
+    </div>
+
+    <input type="hidden" name="inventory_json" id="inventory_json"><input type="hidden" name="classes_json" id="classes_json"><input type="hidden" name="skills_json" id="skills_json"><input type="hidden" name="saves_json" id="saves_json">
+</form>
+
+<div class="nav-footer"><button class="btn" id="btnBack" onclick="changeStep(-1)" style="visibility:hidden;">Back</button><button class="btn btn-next" id="btnNext" onclick="changeStep(1)">Next</button><button class="btn btn-save" id="btnSave" onclick="submitForm()" style="display:none;">Save & Finish</button></div>
+
+<script>
+    var currentStep=1; var totalSteps=6;
+    function changeStep(dir){
+        document.getElementById('step'+currentStep).classList.remove('active'); document.getElementById('dot'+currentStep).classList.remove('active');
+        if(dir===1) document.getElementById('dot'+currentStep).classList.add('completed');
+        currentStep+=dir;
+        document.getElementById('step'+currentStep).classList.add('active'); document.getElementById('dot'+currentStep).classList.add('active'); document.getElementById('dot'+currentStep).classList.remove('completed');
+        document.getElementById('btnBack').style.visibility=(currentStep===1)?'hidden':'visible';
+        if(currentStep===totalSteps){ document.getElementById('btnNext').style.display='none'; document.getElementById('btnSave').style.display='block'; populateSpellDropdown(); }
+        else{ document.getElementById('btnNext').style.display='block'; document.getElementById('btnSave').style.display='none'; }
+        recalc();
+    }
+
+    var RACES={{ races|tojson }}; var CLASSES={{ classes|tojson }}; var ACTIONS={{ all_actions|tojson }};
+    var savedClasses={{ char.classes|tojson }}; var savedInventory={{ char.inventory|tojson }}; var savedSkills={{ char.skills|tojson }}; var savedSaves={{ char.saves|tojson }};
+    var charInventory = [];
+
+    // --- HELPER: MAP CLASS TO STAT ---
+    function getClassStat(className) {
+        if(['Cleric','Druid','Ranger','Monk'].includes(className)) return "WIS";
+        if(['Bard','Paladin','Sorcerer','Warlock'].includes(className)) return "CHA";
+        return "INT"; 
+    }
+
+    // --- LOCAL SPELL LOGIC ---
+    function addFixedSpells() {
+        var race = document.getElementById('raceSelect').value;
+        if(RACES[race] && RACES[race].auto_spells) {
+            RACES[race].auto_spells.forEach(s => addInvItem(s)); 
+        }
+        var rows = document.getElementById('classContainer').children;
+        for(var i=0; i<rows.length; i++){
+            var cName = rows[i].querySelector('.cls-name').innerText;
+            var sub = rows[i].querySelector('.sub-select').value;
+            var lvl = parseInt(rows[i].querySelector('.lvl-input').value);
+            var cls = CLASSES[cName];
+            
+            if(sub !== '-' && cls.subclasses && cls.subclasses[sub] && cls.subclasses[sub].auto_spells) {
+                cls.subclasses[sub].auto_spells.forEach(s => {
+                    var n = Array.isArray(s) ? s[1] : s; var l = Array.isArray(s) ? s[0] : 1;
+                    if(lvl >= l) addInvItem(n);
+                });
+            }
+            if(cls.auto_spells) {
+                cls.auto_spells.forEach(s => {
+                    var n = Array.isArray(s) ? s[1] : s; var l = Array.isArray(s) ? s[0] : 1;
+                    if(lvl >= l) addInvItem(n);
+                });
+            }
+        }
+        recalc();
+    }
+
+    function populateSpellDropdown() {
+        var cls = document.getElementById('spellClassFilter').value;
+        var lvl = parseInt(document.getElementById('spellLevelFilter').value);
+        if(!cls || cls === '') return;
+
+        var picker = document.getElementById('spellPicker');
+        picker.innerHTML = '<option disabled selected>-- Select Spell --</option>';
+        
+        // Filter ACTIONS (Local List)
+        var spells = ACTIONS.filter(a => a.category === 'Spell' && a.level === lvl && a.classes.includes(cls));
+        
+        if(spells.length > 0) {
+            spells.forEach(s => {
+                var opt = document.createElement('option');
+                opt.value = s.name; 
+                opt.innerText = s.name;
+                picker.appendChild(opt);
+            });
+        } else { picker.innerHTML = '<option disabled>No spells found</option>'; }
+    }
+
+    function addSelectedSpell() {
+        var name = document.getElementById('spellPicker').value;
+        if(name && !name.includes('--')) {
+            addInvItem(name);
+        }
+    }
+
+    // --- EQUIPMENT API ONLY ---
+    var searchTimeout;
+    function searchAPI(type) {
+        if(type === 'spell') return; // Disable API search for spells here
+        clearTimeout(searchTimeout);
+        var q = document.getElementById('equipSearch').value;
+        var resDiv = document.getElementById('equipResults');
+        if(q.length<2){resDiv.style.display='none';return;}
+        
+        searchTimeout = setTimeout(() => {
+            fetch(`https://www.dnd5eapi.co/api/equipment?name=${q}`)
+            .then(r=>r.json()).then(data=>{
+                resDiv.innerHTML="";
+                if(data.results.length>0){
+                    resDiv.style.display='block';
+                    data.results.forEach(item=>{
+                        var div=document.createElement('div'); div.className='api-item'; div.innerText=item.name;
+                        div.onclick=()=>{ addItemFromAPI(item.index); resDiv.style.display='none'; document.getElementById('equipSearch').value=''; };
+                        resDiv.appendChild(div);
+                    });
+                } else { resDiv.style.display='none'; }
+            });
+        }, 300);
+    }
+
+    function addItemFromAPI(index) {
+        fetch(`https://www.dnd5eapi.co/api/equipment/${index}`).then(r=>r.json()).then(data=>{
+            var act = {
+                name: data.name, dice: "-", type: "-",
+                category: (data.equipment_category.name === "Weapon" ? "Weapon" : "Armor"),
+                desc: data.desc ? data.desc[0] : "", stats: {}
+            };
+            if(data.equipment_category.name === "Weapon") {
+                act.dice = data.damage ? data.damage.damage_dice : "1";
+                act.type = data.damage ? data.damage.damage_type.name : "Physical";
+                act.stats = { stat: "STR" };
+                if(data.properties && data.properties.find(p=>p.index==='finesse')) act.stats.stat = "DEX";
+                if(data.weapon_range === 'Ranged') { act.category = "Simple Ranged"; act.stats.stat="DEX"; }
+            } else if(data.equipment_category.name === "Armor") {
+                act.ac = data.armor_class.base; act.armor_type = data.armor_category; 
+            }
+            addInvItem(act.name, act); 
+        });
+    }
+
+    function addInvItem(name, apiData=null) {
+        if(charInventory.find(i=>i.name===name)) return;
+        if(apiData) charInventory.push({name: name, equip: true, prof: false, stats: apiData});
+        else charInventory.push({name: name, equip: true, prof: false, stats: null}); // Local items use null stats, rely on game_rules lookup in sheet
+        
+        var stats = apiData;
+        if(!stats) {
+            // Check local rules for category to place in correct list
+            var gr = ACTIONS.find(a=>a.name===name);
+            if(gr) stats = gr;
+        }
+
+        var targetId = 'listWeapons';
+        if(stats && stats.category === 'Spell') { targetId = (stats.level === 0) ? 'listCantrips' : 'listSpells'; }
+        
+        var list = document.getElementById(targetId);
+        var visualExist = false; list.querySelectorAll('.wep-name').forEach(e=>{if(e.innerText===name)visualExist=true;}); if(visualExist) return;
+
+        var el = document.createElement('div'); el.className='item-row';
+        el.innerHTML = `<span class="wep-name" style="flex:1">${name}</span>
+            <label style="font-size:0.8em; margin-right:5px;"><input type="checkbox" class="wep-equip" checked onchange="syncInv()"> Equip</label>
+            <label style="font-size:0.8em; margin-right:5px;"><input type="checkbox" class="wep-prof" onchange="syncInv()"> Prof</label>
+            <button type="button" onclick="removeInvItem('${name}', this)" style="color:#f44; background:none; padding:0;">x</button>`;
+        list.appendChild(el);
+        recalc();
+    }
+
+    function removeInvItem(name, btn) { charInventory = charInventory.filter(i=>i.name !== name); btn.parentNode.remove(); recalc(); }
+    function syncInv() { /* Submit handles */ }
+
+    // --- IS AUTO SPELL CHECK ---
+    function isAutoSpell(spellName) {
+        var raceName = document.getElementById('raceSelect').value;
+        if(RACES[raceName] && RACES[raceName].auto_spells && RACES[raceName].auto_spells.includes(spellName)) return true;
+        var rows = document.getElementById('classContainer').children;
+        for(var i=0; i<rows.length; i++) {
+            var cName = rows[i].querySelector('.cls-name').innerText; var sub = rows[i].querySelector('.sub-select').value; var cls = CLASSES[cName];
+            if(cls.auto_spells) { for(var s of cls.auto_spells) { var n = Array.isArray(s) ? s[1] : s; if(n === spellName) return true; } }
+            if(sub !== '-' && cls.subclasses && cls.subclasses[sub] && cls.subclasses[sub].auto_spells) { for(var s of cls.subclasses[sub].auto_spells) { var n = Array.isArray(s) ? s[1] : s; if(n === spellName) return true; } }
+        }
+        return false;
+    }
+
+    // --- STANDARD BUILDER LOGIC ---
+    function toggleStatMode(){ var m=document.getElementById('statMode').value; document.getElementById('statsManual').style.display=(m==='manual')?'grid':'none'; document.getElementById('statsArray').style.display=(m==='array')?'grid':'none'; recalc(); }
+    function syncStat(s,v){ document.getElementById('base_'+s).value=v; recalc(); }
+    function addClassRow(d=null){ var c=document.getElementById('classContainer'); var n=d?d.name:document.getElementById('newClassSelect').value; var l=d?d.level:1; var s=d?d.subclass:'-'; var el=document.createElement('div'); el.className='row'; el.style.background="#333"; el.style.padding="10px"; el.innerHTML=`<span class="cls-name" style="width:120px; font-weight:bold;">${n}</span><input type="number" class="lvl-input" value="${l}" min="1" max="20" style="width:50px; text-align:center;" oninput="updateSub(this.parentNode); recalc()"><select class="sub-select" style="flex:1; margin-bottom:0" onchange="recalc()"></select><button type="button" onclick="this.parentNode.remove(); recalc()" style="background:#a33; width:30px; font-weight:bold;">x</button>`; c.appendChild(el); updateSub(el,s); if(!d) recalc(); }
+    function updateSub(row, selVal='-'){ var n=row.querySelector('.cls-name').innerText; var l=parseInt(row.querySelector('.lvl-input').value); var sel=row.querySelector('.sub-select'); var cls=CLASSES[n]; if(!cls) return; var cur=(selVal!=='-')?selVal:sel.value; var req=cls.subclass_lvl||1; sel.innerHTML='<option value="-">-</option>'; if(l<req){ sel.innerHTML=`<option disabled selected>Unlocks Lvl ${req}</option>`; sel.disabled=true; } else{ sel.disabled=false; if(cls.subclasses) Object.keys(cls.subclasses).forEach(s=>{ var o=document.createElement('option'); o.value=s; o.innerText=s; if(s===cur) o.selected=true; sel.appendChild(o); }); } }
+    
+    function calcHP(mods){ var tot=0; var lvl=0; var cm=mods['CON']||0; var rows=document.getElementById('classContainer').children; for(var i=0;i<rows.length;i++){ var nm=rows[i].querySelector('.cls-name').innerText; var l=parseInt(rows[i].querySelector('.lvl-input').value); var sub=rows[i].querySelector('.sub-select').value; var cls=CLASSES[nm]; if(cls){ var hd=cls.hit_die; var avg=(hd/2)+1; if(i===0){ tot+=hd+cm; if(l>1) tot+=(avg+cm)*(l-1); } else { tot+=(avg+cm)*l; } if(nm==="Sorcerer" && sub==="Draconic Bloodline") tot+=l; } lvl+=l; } var r=document.getElementById('raceSelect').value; if(RACES[r] && RACES[r].hp_bonus) tot+=(RACES[r].hp_bonus*lvl); if(tot>0) document.getElementById('hpMaxInput').value=tot; }
+
+    function addStartingGear(){
+        addInvItem("Unarmed Strike", ACTIONS.find(a=>a.name==="Unarmed Strike"));
+        var rows=document.getElementById('classContainer').children;
+        for(var i=0;i<rows.length;i++){
+            var n=rows[i].querySelector('.cls-name').innerText; var l=parseInt(rows[i].querySelector('.lvl-input').value); var c=CLASSES[n];
+            if(c.starting_gear) {
+                c.starting_gear.forEach(gearName => {
+                    var local = ACTIONS.find(a=>a.name===gearName);
+                    if(local) addInvItem(gearName, local);
+                    else {
+                        fetch(`https://www.dnd5eapi.co/api/equipment?name=${gearName}`).then(r=>r.json()).then(d=>{
+                            if(d.results.length>0) addItemFromAPI(d.results[0].index);
+                            else addInvItem(gearName, null);
+                        });
+                    }
+                });
+            }
+            if(c.features) c.features.forEach(f=>{if(l>=f[0]) addInvItem(f[1], ACTIONS.find(a=>a.name===f[1]));});
+        }
+        recalc();
+    }
+
+    function calcLimits(clsName, level, mod) {
+        var c = CLASSES[clsName]; if(!c) return {maxSpell:0, known:0, cantrips:0};
+        var maxS = 0, known = 0, cantrips = 0;
+        if(c.spell_rules) {
+            var type = c.spell_rules.type;
+            if(type==="Full") maxS = Math.ceil(level/2.0); else if(type==="Half") maxS = (level<2)?0:Math.ceil(level/2.0); else if(type==="Pact") maxS = Math.ceil(level/2.0);
+            if(c.spell_rules.prepare==="Prepared") known = Math.max(1, level + mod); else known = (level<=1)?2 : (level<=2?3 : 3+Math.floor(level/2)); 
+        }
+        if(c.cantrip_progression) cantrips = c.cantrip_progression[level-1] || 0;
+        return {maxSpell: maxS, known: known, cantrips: cantrips};
+    }
+
+    function recalc(){
+        var r=document.getElementById('raceSelect').value; var rd=RACES[r]||{bonuses:{}}; var mods={};
+        var mode=document.getElementById('statMode').value; var pre=(mode==='array')?'array_':'manual_';
+        ['STR','DEX','CON','INT','WIS','CHA'].forEach(s=>{ var v=document.getElementById(pre+s).value; var b=parseInt(v)||10; if(v==='-') b=10; document.getElementById('base_'+s).value=b; var t=b+(rd.bonuses[s]||0); var m=Math.floor((t-10)/2); mods[s]=m; document.getElementById('mod_'+s).innerText=(m>=0?'+':'')+m; if(document.getElementById('mod_arr_'+s)) document.getElementById('mod_arr_'+s).innerText=(m>=0?'+':'')+m; });
+        calcHP(mods);
+        document.querySelectorAll('.skill-lbl').forEach(x=>x.classList.remove('highlight','class-opt'));
+        if(rd.skills) rd.skills.forEach(x=>{ var el=document.getElementById('lbl_'+x); if(el){ el.classList.add('highlight'); el.querySelector('input').checked=true; }});
+        
+        var rows=document.getElementById('classContainer').children; var totalCntLim=0; var totalSplLim=0;
+        for(var i=0;i<rows.length;i++){ var nm=rows[i].querySelector('.cls-name').innerText; var l=parseInt(rows[i].querySelector('.lvl-input').value); var cls=CLASSES[nm]; if(cls && cls.spell_rules){ var lim=calcLimits(nm,l,mods[cls.spell_rules.stat]); totalCntLim+=lim.cantrips; totalSplLim+=lim.known; } }
+        
+        var manCnt=0; var manSpl=0;
+        charInventory.forEach(item => {
+            var stats = item.stats;
+            if(!stats) stats = ACTIONS.find(a=>a.name===item.name);
+            if(stats && stats.category==='Spell' && !isAutoSpell(item.name)) {
+                if(stats.level===0) manCnt++; else manSpl++;
+            }
+        });
+        
+        var disp = document.getElementById('limitDisplay');
+        if(totalCntLim>0 || totalSplLim>0) {
+            disp.innerHTML = `Cantrips: ${manCnt}/${totalCntLim} | Spells: ${manSpl}/${totalSplLim}`;
+            disp.className = (manCnt>totalCntLim || manSpl>totalSplLim) ? "limit-warn" : "";
+        } else disp.innerHTML = "";
+
+        for(var i=0;i<rows.length;i++){ var nm=rows[i].querySelector('.cls-name').innerText; if(CLASSES[nm].skill_options) CLASSES[nm].skill_options.forEach(x=>{ var el=document.getElementById('lbl_'+x); if(el) el.classList.add('class-opt'); }); if(CLASSES[nm].saves) CLASSES[nm].saves.forEach(x=>{ var el=document.querySelector(`.save-prof[data-stat="${x}"]`); if(el) el.checked=true; }); }
+        
+        if(document.getElementById('spellClassFilter').value==='' && rows.length>0) {
+            document.getElementById('spellClassFilter').value = rows[0].querySelector('.cls-name').innerText;
+            populateSpellDropdown();
+        }
+    }
+
+    function submitForm(){
+        var finalInv = [];
+        document.querySelectorAll('.item-row').forEach(r=>{
+            var name = r.querySelector('.wep-name').innerText;
+            var equip = r.querySelector('.wep-equip').checked;
+            var prof = r.querySelector('.wep-prof').checked;
+            var data = charInventory.find(i=>i.name===name);
+            if(data) { data.equip = equip; data.prof = prof; finalInv.push(data); }
+        });
+        document.getElementById('inventory_json').value=JSON.stringify(finalInv);
+        var cls=[]; var rows=document.getElementById('classContainer').children; for(var i=0;i<rows.length;i++){cls.push({name:rows[i].querySelector('.cls-name').innerText, level:parseInt(rows[i].querySelector('.lvl-input').value), subclass:rows[i].querySelector('.sub-select').value});} document.getElementById('classes_json').value=JSON.stringify(cls);
+        var sk=[]; document.querySelectorAll('.skill-check').forEach(c=>{if(c.checked)sk.push(c.dataset.name)}); document.getElementById('skills_json').value=JSON.stringify(sk);
+        var sv=[]; document.querySelectorAll('.save-prof').forEach(c=>{if(c.checked)sv.push(c.dataset.stat)}); document.getElementById('saves_json').value=JSON.stringify(sv);
+        document.getElementById('charForm').submit();
+    }
+
+    window.onload=function(){
+        if(savedClasses.length) savedClasses.forEach(c=>addClassRow(c)); else addClassRow();
+        savedSkills.forEach(s=>{var c=document.querySelector(`.skill-check[data-name="${s}"]`); if(c)c.checked=true;});
+        savedSaves.forEach(s=>{var c=document.querySelector(`.save-prof[data-stat="${s}"]`); if(c)c.checked=true;});
+        if(savedInventory.length) {
+            charInventory = savedInventory; 
+            charInventory.forEach(i => addInvItem(i.name, i.stats));
+            setTimeout(() => {
+                document.querySelectorAll('.item-row').forEach(r=>{
+                    var n=r.querySelector('.wep-name').innerText; var dat=charInventory.find(i=>i.name===n);
+                    if(dat){ r.querySelector('.wep-equip').checked=dat.equip; r.querySelector('.wep-prof').checked=dat.prof; }
+                });
+            }, 100);
+        }
+        recalc();
+    };
+</script>
+</body>
+</html>
