@@ -52,7 +52,7 @@ A lightweight, browser-based Virtual Tabletop (VTT) and Campaign Manager for Dun
     ```
     /DNDave
     ├── DMDave.py           # The main server file
-    ├── game_rules.py       # Local database of Races, Classes, and Spells
+    ├── game_rules.py       # Local database of Races, Classes, and Spells (including subclasses and some homebrew subclasses)
     └── templates/          # HTML files (lobby, builder, sheet, dm)
     ```
 
